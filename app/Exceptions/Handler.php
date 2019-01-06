@@ -2,8 +2,14 @@
 
 namespace App\Exceptions;
 
+use App\Exceptions\Api\ApiException;
+use App\Models\Api\Response\Content as ApiContent;
+use App\Models\Api\Response\Content\Error as ApiError;
 use Exception;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
 
 class Handler extends ExceptionHandler
 {
@@ -38,14 +44,81 @@ class Handler extends ExceptionHandler
     }
 
     /**
+     * @param $request
+     * @param AuthenticationException $exception
+     * @return JsonResponse|Response
+     */
+    protected function unauthenticated($request, AuthenticationException $exception)
+    {
+        return response()->json(['error' => 'Unauthenticated.'], 401);
+    }
+
+    /**
+     * Return if the exception is an API exception
+     *
+     * @param Exception $exception
+     * @return bool
+     */
+    private static function isApiException(Exception $exception): bool
+    {
+        return $exception instanceof ApiException;
+    }
+
+    /**
+     * Return the response generate with the ApiException
+     *
+     * @param ApiException $exception
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function getApiExceptionResponse(ApiException $exception): JsonResponse
+    {
+        $api_response = new ApiContent();
+        $error = new ApiError();
+
+        $error->setError($exception->getError());
+        $error->setMessage($exception->getMessage());
+        $error->setFrontMessage($exception->getFrontMessage());
+
+        $api_response->setError($error);
+
+        return response()->json($api_response, $exception->getHttpStatus());
+    }
+
+    /**
+     * Return the response generate with the ApiException
+     *
+     * @param Exception $exception
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function getSimpleExceptionResponse(Exception $exception): JsonResponse
+    {
+        $api_response = new ApiContent();
+        $error = new ApiError();
+
+        $error->setError($exception->getCode());
+        $error->setMessage($exception->getMessage());
+
+        $api_response->setError($error);
+        return response()->json($api_response, Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    /**
      * Render an exception into an HTTP response.
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \Exception  $exception
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
      */
     public function render($request, Exception $exception)
     {
+        if ($request->is('api/*')) {
+            if (self::isApiException($exception)) {
+                return $this->getApiExceptionResponse($exception);
+            }
+
+            return $this->getSimpleExceptionResponse($exception);
+        }
+
         return parent::render($request, $exception);
     }
 }
