@@ -19,7 +19,7 @@ class Handler extends ExceptionHandler
      * @var array
      */
     protected $dontReport = [
-        //
+        \League\OAuth2\Server\Exception\OAuthServerException::class,
     ];
 
     /**
@@ -31,6 +31,11 @@ class Handler extends ExceptionHandler
         'password',
         'password_confirmation',
     ];
+
+    protected function context()
+    {
+        return [];
+    }
 
     /**
      * Report or log an exception.
@@ -62,6 +67,19 @@ class Handler extends ExceptionHandler
     private static function isApiException(Exception $exception): bool
     {
         return $exception instanceof ApiException;
+    }
+
+    /**
+     * Return the response generate with the ApiException
+     *
+     * @param Exception $exception
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function getUnauthorizedExceptionResponse(): JsonResponse
+    {
+        $api_response = new ApiContent();
+
+        return response()->json($api_response, Response::HTTP_UNAUTHORIZED);
     }
 
     /**
@@ -112,6 +130,10 @@ class Handler extends ExceptionHandler
     public function render($request, Exception $exception)
     {
         if ($request->is('api/*')) {
+            if (($exception instanceof AuthenticationException)) {
+                return self::getUnauthorizedExceptionResponse();
+            }
+
             if (self::isApiException($exception)) {
                 return $this->getApiExceptionResponse($exception);
             }
